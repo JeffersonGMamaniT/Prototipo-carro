@@ -1,0 +1,200 @@
+#include <SoftwareSerial.h>
+
+// Variables para la velocidad de los motores
+int VelocidadMotor1 = 6; 
+int VelocidadMotor2 = 5;
+
+// Definición de los pines de control de giro de los motores In1, In2, In3 e In4
+int Motor1A = 13; 
+int Motor1B = 12;  
+int Motor2C = 11; 
+int Motor2D = 10; 
+
+// Sensores infrarrojos - izquierdo y derecho
+int infraPin  = 2;    
+int infraPin1 = 4;
+
+// Variables para la captura de los valores: 0 - fondo claro y 1 - línea negra
+int valorInfra = 0;  
+int valorInfra1 = 0;  
+
+// Variable para almacenar el estado del receptor
+bool activo = false;
+
+// Variable para indicar si se ha realizado el giro
+bool giroRealizado = false;
+
+// LED conectado al pin 9
+int ledPin = 9;
+
+// Configuración de SoftwareSerial para el módulo Bluetooth HC-05
+SoftwareSerial BTSerial(7, 8); // RX | TX
+
+void setup() {
+  Serial.begin(9600);
+  BTSerial.begin(9600); // Inicializar la comunicación serial con el módulo Bluetooth
+  
+  delay(1000);
+
+  // Establecemos modo de los pines de los sensores infrarrojos
+  pinMode(infraPin, INPUT);    
+  pinMode(infraPin1, INPUT);
+
+  // Establecemos modo de los pines del control de motores
+  pinMode(Motor1A, OUTPUT);
+  pinMode(Motor1B, OUTPUT);
+  pinMode(Motor2C, OUTPUT);
+  pinMode(Motor2D, OUTPUT);
+  pinMode(VelocidadMotor1, OUTPUT);
+  pinMode(VelocidadMotor2, OUTPUT);
+
+  // Configuramos los dos motores a velocidad máxima (255/255)
+  analogWrite(VelocidadMotor1, 255); 
+  analogWrite(VelocidadMotor2, 255);  
+
+  // Configurar pin del LED como salida
+  pinMode(ledPin, OUTPUT);
+}
+
+void loop() {
+  // Verificar si hay datos disponibles en el módulo Bluetooth
+  if (BTSerial.available()) {
+    int dato = BTSerial.parseInt(); // Leer el número enviado desde el celular
+    
+    if (dato == 10) { // Si se recibe '10' desde el celular
+      activo = !activo; // Alternar el estado activo
+
+      // Encender el LED cuando se activan los motores
+      digitalWrite(ledPin, HIGH);
+      delay(500); // Opcional: espera breve para indicar el encendido del LED
+      digitalWrite(ledPin, LOW);
+
+      // Reiniciar el estado de giro realizado
+      giroRealizado = false;
+    }
+  }
+
+  if (activo) {
+    // Leemos el valor de los infrarrojos: 0 - fondo claro y 1 - línea negra
+    valorInfra = digitalRead(infraPin);   
+    valorInfra1 = digitalRead(infraPin1);
+
+    Serial.print("Valor Infra: ");
+    Serial.print(valorInfra);
+    Serial.print(", Valor Infra1: ");
+    Serial.println(valorInfra1);
+
+    // Si ambos infrarrojos están sobre la línea negra (1)
+    if (valorInfra == 1 && valorInfra1 == 1) {
+      Serial.println("Ninguno en línea");
+
+      // Detener ambos motores
+      detenerMotores();
+
+      activo = false; // Desactivar hasta que se reciba '10' nuevamente
+    } else {
+      // Si ambos infrarrojos están sobre el fondo claro (0), avanzar recto
+      if (valorInfra == 0 && valorInfra1 == 0) {
+        Serial.println("Ambos en línea");
+
+        // Avanzar recto
+        avanzarRecto();
+      } else if (valorInfra == 1 && valorInfra1 == 0) {
+        Serial.println("Derecho en línea");
+
+        // Giro hacia la derecha (ajuste)
+        girarDerecha();
+      } else if (valorInfra == 0 && valorInfra1 == 1) {
+        Serial.println("Izquierdo en línea");
+
+        // Giro hacia la izquierda (ajuste)
+        girarIzquierda();
+      }
+    }
+  } else {
+    // Si no está activo, detener los motores
+    detenerMotores();
+
+    // Realizar el giro de 180° si no se ha realizado y se recibe '10' nuevamente
+    if (!giroRealizado && !activo) {
+      // Girar 180° (ajusta el delay según sea necesario para que el giro sea de 180°)
+      Serial.println("Girando 180°");
+      girar180();
+
+      // Después de girar, seguir la línea
+      while (!activo) {
+        // Leemos el valor de los infrarrojos: 0 - fondo claro y 1 - línea negra
+        valorInfra = digitalRead(infraPin);   
+        valorInfra1 = digitalRead(infraPin1);
+
+        Serial.print("Valor Infra: ");
+        Serial.print(valorInfra);
+        Serial.print(", Valor Infra1: ");
+        Serial.println(valorInfra1);
+
+        // Si ambos infrarrojos están sobre el fondo claro (0), avanzar recto
+        if (valorInfra == 0 && valorInfra1 == 0) {
+          Serial.println("Ambos en línea");
+
+          // Avanzar recto
+          avanzarRecto();
+        } else if (valorInfra == 1 && valorInfra1 == 0) {
+          Serial.println("Derecho en línea");
+
+          // Giro hacia la derecha (ajuste)
+          girarDerecha();
+        } else if (valorInfra == 0 && valorInfra1 == 1) {
+          Serial.println("Izquierdo en línea");
+
+          // Giro hacia la izquierda (ajuste)
+          girarIzquierda();
+        } else if (valorInfra == 1 && valorInfra1 == 1) {
+          Serial.println("Ninguno en línea");
+
+          // Detener ambos motores
+          detenerMotores();
+
+          break; // Salir del bucle
+        }
+      }
+
+      giroRealizado = true;
+    }
+  }
+}
+
+void avanzarRecto() {
+  digitalWrite(Motor1A, HIGH);
+  digitalWrite(Motor1B, LOW);
+  digitalWrite(Motor2C, HIGH);
+  digitalWrite(Motor2D, LOW);
+}
+
+void girarDerecha() {
+  digitalWrite(Motor1A, LOW);
+  digitalWrite(Motor1B, LOW);
+  digitalWrite(Motor2C, HIGH);
+  digitalWrite(Motor2D, LOW);
+}
+
+void girarIzquierda() {
+  digitalWrite(Motor1A, HIGH);
+  digitalWrite(Motor1B, LOW);
+  digitalWrite(Motor2C, LOW);
+  digitalWrite(Motor2D, LOW);
+}
+
+void detenerMotores() {
+  digitalWrite(Motor1A, LOW);
+  digitalWrite(Motor1B, LOW);
+  digitalWrite(Motor2C, LOW);
+  digitalWrite(Motor2D, LOW);
+}
+
+void girar180() {
+  digitalWrite(Motor1A, LOW);
+  digitalWrite(Motor1B, HIGH);
+  digitalWrite(Motor2C, HIGH);
+  digitalWrite(Motor2D, LOW);
+  delay(1000); // Ajusta este valor según sea necesario para que el giro sea de 180°
+}
